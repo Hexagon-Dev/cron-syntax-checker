@@ -8,11 +8,13 @@ use Illuminate\Http\Request;
 
 class CheckController extends Controller
 {
+    public const LIMITS = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]];
+
     /**
      * @throws MissingParameter
      * @throws Exception
      */
-    public function check(Request $request)
+    public function check(Request $request): string
     {
         $template = $request->input('template');
         $value = $request->input('value');
@@ -33,30 +35,11 @@ class CheckController extends Controller
 
         $value[4] = date('w', strtotime($value[0] . '-' . $value[1] . '-' . $value[2]));
 
-        $limits = [[0, 59], [0, 24], [1, 31], [1, 12], [0, 6]];
-
-        echo '
-         <head>
-          <style>
-           TABLE {
-            border-collapse: collapse;
-            border: 2px solid black;
-           }
-           TD, TH {
-            border: 1px solid black;
-            text-align: left;
-            padding: 10px;
-           }
-          </style>
-         </head>
-         <body><table>';
-
         for ($i = 0; $i < 5; $i++) {
-            if (!$this->checkEach($template[$i], $value[$i], $limits[$i])) {
+            if (!$this->checkEach($template[$i], $value[$i], $i)) {
                 return 'pattern does not match';
             }
         }
-        echo '</table><br></body>';
 
         return 'everything ok';
     }
@@ -64,21 +47,26 @@ class CheckController extends Controller
     /**
      * @throws Exception
      */
-    public function checkEach($check, $value, $limits)
+    public function checkEach($check, $value, $type): bool
     {
-        echo '<tr><td>' . $check . '</td><td>' . $value . '</td></tr>';
+        echo $check . ' ' . $value ;
 
-        // all
-        if (strpos($check, "*") === 0) {
-            return true;
+        $allowed = [];
+
+        if ($check === '*') {
+            $allowed[] = $this->addAsterisk($type);
         }
 
         // digit only
         if (is_numeric($check)) {
-            if ($check < $limits[0] || $check > $limits[1]) {
-                throw new Exception('cron pattern limit failed');
+
+            if ($check < self::LIMITS[$type][0] ||
+                $check > self::LIMITS[$type][1]) {
+                throw new Exception('first param is off the limits');
             }
-            return $value === $check;
+            if ($value === $check) {
+                return true;
+            }
         }
 
         // ,
@@ -92,29 +80,81 @@ class CheckController extends Controller
 
         for ($i = 0; $i < $size; $i++) {
             if (false !== strpos($check[$i], "-")) {
-                $values = explode('-', $check[$i]);
+                $allowed[] = $this->addHyphen($check[$i], $type);
+            }
 
-                if ($values[0] < $limits[0] && $values[1] < $limits[0] && $check[0] > $limits[1] && $check[1] > $limits[1]) {
-                    throw new Exception('cron pattern limit failed');
-                }
-                return !($value < $values[0] || $value > $values[1]);
-            }
             if (preg_match('/\//', $check[$i])) {
-                $values = explode('/', $check[$i]);
-                if ($values[0] < $limits[0] && $values[1] < $limits[0] && $check[0] > $limits[1] && $check[1] > $limits[1]) {
-                    throw new Exception('cron pattern limit failed');
-                }
-                return !($value < $values[0] || $value % $values[1] !== 0);
-            }
-            if (!is_numeric($check[$i])) {
-                return false;
+                $allowed[] = $this->addSlash($check[$i], $type);
             }
 
             if ($value === $check[$i]) {
-                return true;
+                $allowed[] = [$value];
             }
         }
 
-        return false;
+        $allowed = array_unique(array_merge(...$allowed));
+
+        return in_array((int)$value, $allowed, true);
+    }
+
+    public function addAsterisk($type): array
+    {
+        $array = [];
+
+        for ($i = 0; $i <= self::LIMITS[$type][1]; $i++) {
+            $array[] = $i;
+        }
+
+        return $array;
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function addHyphen($template, $type): array
+    {
+        $array = [];
+        $values = explode('-', $template);
+
+        $this->checkRange($values, $type);
+
+        for ($i = $values[0]; $i <= $values[1]; $i++) {
+            $array[] = $i;
+        }
+
+        return $array;
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function addSlash($template, $type): array
+    {
+        $array = [];
+        $values = explode('/', $template);
+
+        $this->checkRange($values, $type);
+
+        if ($values[0] === '*') {
+            $values[0] = 0;
+        }
+
+        for ($i = $values[0]; $i <= self::LIMITS[$type][1]; $i++) {
+            if ($i % $values[1] === 0) {
+                $array[] = $i;
+            }
+        }
+
+        return $array;
+    }
+
+    public function checkRange($values, $type): void
+    {
+        if ($values[0] < self::LIMITS[$type][0] ||
+            $values[0] > self::LIMITS[$type][1] ||
+            $values[1] < self::LIMITS[$type][0] ||
+            $values[1] > self::LIMITS[$type][1]) {
+            throw new Exception('first param is off the limits');
+        }
     }
 }
