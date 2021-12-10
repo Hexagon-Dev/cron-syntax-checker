@@ -31,33 +31,38 @@ class CronSyntaxChecker
     /**
      * @throws Throwable
      */
-    public function checkEach($template, $value, $type): bool
+    public function checkEach($partition, $value, $type): bool
     {
         $allowed = [];
 
-        if ($template === '*') {
+        if ($partition === '*') {
             return true;
         }
 
-        if (is_numeric($template)) {
-            if ($template < self::LIMITS[$type][0] || $template > self::LIMITS[$type][1]) {
+        if (is_numeric($partition)) {
+            if ($partition < self::LIMITS[$type][0] || $partition > self::LIMITS[$type][1]) {
                 throw new Exception('template is off the limits');
             }
-            if ($value === (int)$template) {
+            if ($value === (int)$partition) {
                 return true;
             }
         }
 
-        foreach ($this->splitCommaValues($template) as $part) {
-            if (false !== strpos($part, "-")) {
-                $allowed[] = $this->addHyphen($part, $type);
+        foreach ($this->splitCommaValues($partition) as $part) {
+            if (str_contains($part, '/')) {
+                $allowed[] = $this->parseSlash($part, $type);
+                continue;
             }
-            if (preg_match('/\//', $part)) {
-                $allowed[] = $this->addSlash($part, $type);
+            if (str_contains($part, "-")) {
+                $allowed[] = $this->parseHyphen($part, $type);
+                continue;
             }
             if ($value === (int)$part) {
                 $allowed[] = [$value];
+                continue;
             }
+
+            //new Exception()
         }
 
         return in_array((int)$value, array_unique(array_merge(...$allowed)), true);
@@ -65,17 +70,13 @@ class CronSyntaxChecker
 
     public function splitCommaValues($check): array
     {
-        if (preg_match('/,/', $check)) {
-            return explode(',', $check);
-        }
-
-        return [$check];
+        return explode(',', $check);
     }
 
     /**
      * @throws Throwable
      */
-    public function addHyphen($template, $type): array
+    public function parseHyphen($template, $type): array
     {
         $values = explode('-', $template);
 
@@ -87,7 +88,7 @@ class CronSyntaxChecker
     /**
      * @throws Throwable
      */
-    public function addSlash($template, $type): array
+    public function parseSlash($template, $type): array
     {
         $array = [];
         $values = explode('/', $template);
@@ -108,13 +109,16 @@ class CronSyntaxChecker
     /**
      * @throws Throwable
      */
-    public function checkRange($values, $type): void
+    public function checkRange($value, $type): void
     {
-        $values[0] = $values[0] === '*' ? 0 : $values[0];
+        if (!is_array($value)) {
+            $value = [$value];
+        }
 
-        if (!in_array((int)$values[0], range(self::LIMITS[$type][0], self::LIMITS[$type][1]), true) &&
-            !in_array((int)$values[1], range(self::LIMITS[$type][0], self::LIMITS[$type][1]), true)) {
-            throw new Exception('param is off the limits');
+        foreach ($value as $var) {
+            if (!str_contains($var, '*') && !in_array((int)$var, range(...self::LIMITS[$type]), true)) {
+                throw new Exception('param is off the limits');
+            }
         }
     }
 }
