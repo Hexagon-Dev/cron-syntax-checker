@@ -61,8 +61,9 @@ class CronSyntaxChecker
                 $allowed[] = [$value];
                 continue;
             }
-
-            //new Exception()
+            if (!is_numeric($part)) {
+                throw new Exception('value can not be processed');
+            }
         }
 
         return in_array((int)$value, array_unique(array_merge(...$allowed)), true);

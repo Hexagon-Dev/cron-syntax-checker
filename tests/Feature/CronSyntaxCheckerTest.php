@@ -8,7 +8,9 @@ class CronSyntaxCheckerTest extends TestCase
 {
     public array $success = ['message' => 'date matches'];
     public array $dateError = ['error' => 'date does not match'];
+    public array $dateMalformed = ['error' => 'malformed date'];
     public array $offLimitError = ['error' => 'template is off the limits'];
+    public array $offLimitMalformed = ['error' => 'value can not be processed'];
 
     /** @test */
     public function matchingDate(): void
@@ -23,7 +25,7 @@ class CronSyntaxCheckerTest extends TestCase
     {
         $response = $this->post('/api/check', ['template'=> '* * * * *', 'date' => '2021-14-4 15:03:00',]);
 
-        $response->assertJson($this->dateError);
+        $response->assertJson($this->dateMalformed);
     }
 
     /** @test */
@@ -35,11 +37,19 @@ class CronSyntaxCheckerTest extends TestCase
     }
 
     /** @test */
-    public function templateInvalid(): void
+    public function templateOffLimit(): void
     {
         $response = $this->post('/api/check', ['template'=> '* 99 * * *', 'date' => '2021-12-4 15:03:00',]);
 
         $response->assertJson($this->offLimitError);
+    }
+
+    /** @test */
+    public function templateInvalid(): void
+    {
+        $response = $this->post('/api/check', ['template'=> '* 9b9 * * *', 'date' => '2021-12-4 15:03:00',]);
+
+        $response->assertJson($this->offLimitMalformed);
     }
 
     /** @test */

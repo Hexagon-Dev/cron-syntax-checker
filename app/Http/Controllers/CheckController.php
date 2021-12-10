@@ -22,8 +22,9 @@ class CheckController extends Controller
         try {
             $dateTime = new DateTime($data['date']);
         } catch (Exception $e) {
-            throw new Exception('date does not match');
+            throw new Exception('malformed date');
         }
+
         if ($checker->process($data['template'], $dateTime)) {
             return response()->json([
                 'message' => 'date matches',
